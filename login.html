@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 / 注册 · AI 工具箱</title>
+<meta name="description" content="登录 AI 工具箱，导入的文档会保存到你的账号，随时回来继续提问。">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root{
+    --bg:#f6f7fb;--card:#fff;--ink:#1a1d29;--sub:#6b7280;--line:#e7e9f0;
+    --brand:#5b6cff;--brand2:#8b5cf6;--brand-grad:linear-gradient(135deg,#5b6cff,#8b5cf6);
+    --ok:#16a34a;--warn:#d97706;--err:#dc2626;--radius:18px;
+    --shadow:0 10px 30px rgba(20,24,60,.08);--shadow-sm:0 4px 14px rgba(20,24,60,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px;width:100%}
+
+  header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;letter-spacing:-.3px;text-decoration:none;color:var(--ink)}
+  .logo .mark{width:34px;height:34px;border-radius:10px;background:var(--brand-grad);display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;box-shadow:0 4px 12px rgba(91,108,255,.35)}
+  .back{font-size:14px;font-weight:600;color:var(--sub);text-decoration:none}
+  .back:hover{color:var(--brand)}
+
+  main{flex:1;display:flex;align-items:center;justify-content:center;padding:48px 20px}
+  .panel{width:100%;max-width:420px}
+  .panel-head{text-align:center;margin-bottom:26px}
+  .panel-head h1{font-size:26px;font-weight:900;letter-spacing:-.6px;margin-bottom:8px}
+  .panel-head p{color:var(--sub);font-size:14px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px}
+  .tabs{display:flex;gap:6px;background:#f4f5f9;border-radius:12px;padding:4px;margin-bottom:22px}
+  .tabs button{
+    flex:1;border:none;background:transparent;border-radius:9px;padding:9px;
+    font-size:14px;font-weight:700;color:var(--sub);cursor:pointer;font-family:inherit;transition:.16s;
+  }
+  .tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.07)}
+
+  label{display:block;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:7px}
+  .field{margin-bottom:16px}
+  input[type=email],input[type=password]{
+    width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 14px;
+    font-size:14.5px;font-family:inherit;outline:none;transition:.16s;background:#fff;color:var(--ink);
+  }
+  input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(91,108,255,.12)}
+  .hint{font-size:12px;color:#9aa1b2;margin-top:6px}
+
+  .submit{
+    width:100%;padding:13px;border:none;border-radius:12px;background:var(--brand-grad);
+    color:#fff;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;
+    box-shadow:0 6px 16px rgba(91,108,255,.3);transition:.18s;margin-top:4px;
+  }
+  .submit:hover{filter:brightness(1.06)}
+  .submit:disabled{opacity:.55;cursor:not-allowed}
+
+  .msg{margin-top:14px;font-size:13.5px;font-weight:600;text-align:center;min-height:20px}
+  .msg.err{color:var(--err)}
+  .msg.ok{color:var(--ok)}
+
+  .perks{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}
+  .perks div{display:flex;gap:9px;align-items:flex-start;font-size:13px;color:var(--sub);margin-bottom:9px}
+  .perks div:last-child{margin-bottom:0}
+  .perks .dot{color:var(--brand);font-weight:700;flex-shrink:0}
+
+  footer{text-align:center;color:#9aa1b2;font-size:13px;padding:24px 0 40px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="index.html"><span class="mark">✦</span>AI 工具箱</a>
+    <a class="back" href="index.html">← 返回首页</a>
+  </div>
+</header>
+
+<main>
+  <div class="panel">
+    <div class="panel-head">
+      <h1 id="pageTitle">登录 AI 工具箱</h1>
+      <p id="pageSub">登录后导入的文档会保存到你的账号</p>
+    </div>
+
+    <div class="card">
+      <div class="tabs">
+        <button id="tabLogin" class="on" onclick="switchMode('login')">登录</button>
+        <button id="tabRegister" onclick="switchMode('register')">注册</button>
+      </div>
+
+      <form id="form" onsubmit="return submitForm(event)">
+        <div class="field">
+          <label for="email">邮箱</label>
+          <input type="email" id="email" placeholder="you@example.com" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="password">密码</label>
+          <input type="password" id="password" placeholder="至少 6 位" autocomplete="current-password" required>
+          <div class="hint" id="pwdHint" style="display:none">密码至少 6 位字符</div>
+        </div>
+        <button class="submit" id="submitBtn" type="submit">登 录</button>
+        <div class="msg" id="msg"></div>
+      </form>
+
+      <div class="perks">
+        <div><span class="dot">→</span><span>文档编译成知识库，随时回来提问，不用重复上传</span></div>
+        <div><span class="dot">→</span><span>词条自动交叉引用，跨文档的问题也能答</span></div>
+        <div><span class="dot">→</span><span>文档只属于你自己，其他人看不到</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>AI 工具箱 · 知识库问答 + 周报生成</footer>
+
+<script>
+let mode = 'login';
+
+function switchMode(m){
+  mode = m;
+  const isLogin = m === 'login';
+  document.getElementById('tabLogin').classList.toggle('on', isLogin);
+  document.getElementById('tabRegister').classList.toggle('on', !isLogin);
+  document.getElementById('submitBtn').textContent = isLogin ? '登 录' : '注 册 并 登 录';
+  document.getElementById('pageTitle').textContent = isLogin ? '登录 AI 工具箱' : '创建新账号';
+  document.getElementById('pageSub').textContent = isLogin ? '登录后导入的文档会保存到你的账号' : '注册即可保存文档并建立你的知识库';
+  document.getElementById('pwdHint').style.display = isLogin ? 'none' : 'block';
+  document.getElementById('password').setAttribute('autocomplete', isLogin ? 'current-password' : 'new-password');
+  setMsg('');
+}
+
+function setMsg(text, type){
+  const el = document.getElementById('msg');
+  el.textContent = text || '';
+  el.className = 'msg' + (type ? ' ' + type : '');
+}
+
+async function submitForm(e){
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const btn = document.getElementById('submitBtn');
+
+  if (!email || !password) { setMsg('请填写邮箱和密码', 'err'); return false; }
+  if (mode === 'register' && password.length < 6) { setMsg('密码至少 6 位', 'err'); return false; }
+
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = mode === 'login' ? '登录中…' : '注册中…';
+  setMsg('');
+
+  try {
+    const res = await fetch('/api/auth/' + (mode === 'login' ? 'login' : 'register'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setMsg(data.error || '操作失败，请重试', 'err');
+      btn.disabled = false;
+      btn.textContent = original;
+      return false;
+    }
+
+    setMsg(mode === 'login' ? '登录成功，正在跳转…' : '注册成功，正在跳转…', 'ok');
+    setTimeout(() => { location.href = nextUrl(); }, 500);
+  } catch (err) {
+    setMsg('网络异常：' + (err.message || '请重试'), 'err');
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+  return false;
+}
+
+function nextUrl(){
+  const p = new URLSearchParams(location.search);
+  const next = p.get('next');
+  if (next && /^[a-zA-Z0-9_-]+\.html$/.test(next)) return next;
+  return 'rag.html';
+}
+
+// 已登录直接跳走
+(async () => {
+  try {
+    const r = await fetch('/api/auth/me');
+    const d = await r.json();
+    if (d && d.user) location.replace(nextUrl());
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

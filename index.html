@@ -88,8 +88,8 @@
 <header>
   <div class="wrap nav">
     <div class="logo"><span class="mark">✦</span>AI 工具箱</div>
-    <div class="nav-right">
-      <span class="user-chip" style="display:flex">✨ 免登录 · 打开即用</span>
+    <div class="nav-right" id="navRight">
+      <a class="btn btn-ghost" href="login.html">登录</a>
     </div>
   </div>
 </header>
@@ -98,15 +98,15 @@
   <section class="hero">
     <div class="badge">✨ 两个实用 AI 工具 · 免配置直接上手</div>
     <h1>让 AI 帮你<br><span class="grad">读懂文档、写好周报</span></h1>
-    <p>上传文档就能问答，写流水账就能生成周报。无需任何 API Key，打开即用。</p>
+    <p>上传文档自动编译成知识库，写流水账就能生成周报。无需任何 API Key，登录即用。</p>
   </section>
 
   <section class="grid">
     <a class="feature f-rag" href="javascript:void(0)" onclick="openRag()">
       <div class="icon">📚</div>
-      <h2>知识库问答（RAG）</h2>
-      <div class="desc">上传 PDF / TXT 文档，针对文档内容提问，AI 基于你的资料精准回答，并标注引用来源。</div>
-      <div class="tags"><span class="tag">文档解析</span><span class="tag">智能检索</span><span class="tag">引用溯源</span></div>
+      <h2>知识库问答</h2>
+      <div class="desc">上传 PDF / TXT 文档，自动编译成结构化知识库（词条 + 双向链接），提问时 AI 基于你的资料精准回答并标注引用词条。</div>
+      <div class="tags"><span class="tag">文档编译</span><span class="tag">知识库</span><span class="tag">词条溯源</span></div>
       <span class="go">立即使用 →</span>
     </a>
     <a class="feature f-report" href="javascript:void(0)" onclick="openReport()">
@@ -119,11 +119,29 @@
   </section>
 </div>
 
-<footer>AI 工具箱 · 免登录直接使用 · 基于 Agnes AI 模型</footer>
+<footer>AI 工具箱 · 知识库问答 + 周报生成 · 基于 Agnes AI 模型</footer>
 
 <script>
 function openRag(){ location.href = 'rag.html'; }
 function openReport(){ location.href = 'report.html'; }
+
+// 登录状态
+(async () => {
+  try {
+    const r = await fetch('/api/auth/me');
+    const d = await r.json();
+    if (!d || !d.user) return;
+    const nav = document.getElementById('navRight');
+    const mail = d.user.email;
+    nav.innerHTML =
+      '<span class="user-chip"><span class="avatar">' + mail[0].toUpperCase() + '</span>' + mail + '</span>' +
+      '<button class="btn btn-ghost" id="logoutBtn">退出</button>';
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+      location.reload();
+    });
+  } catch (e) {}
+})();
 </script>
 </body>
 </html>

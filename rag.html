@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>知识库问答 · AI 工具箱</title>
-<meta name="description" content="上传 PDF、TXT、Markdown 文档，AI 基于文档原文精准回答问题并标注来源。免费在线知识库问答工具，文档在浏览器本地解析，无需上传服务器。">
+<meta name="description" content="上传 PDF、TXT、Markdown 文档，自动编译成可检索的知识库，AI 基于你的资料精准回答并标注引用词条。">
 <meta property="og:type" content="website">
 <meta property="og:title" content="知识库问答 · 基于你的文档回答问题">
-<meta property="og:description" content="上传 PDF / TXT / Markdown，对着文档提问，AI 基于原文作答并标注来源。免费，打开即用。">
+<meta property="og:description" content="上传文档自动构建知识库，跨文档提问也能答。">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <style>
   :root{
@@ -18,7 +18,7 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 20px}
 
   header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
   .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
@@ -26,47 +26,63 @@
   .back:hover{color:var(--brand)}
   .logo{font-weight:800;font-size:16px;letter-spacing:-.3px}
   .logo .mark{color:var(--brand)}
+  .user-area{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--sub)}
+  .user-area .em{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn-ghost:hover{border-color:var(--brand);color:var(--brand)}
 
-  .page{padding:28px 0 60px}
-  .page-head{margin-bottom:24px}
-  .page-head h1{font-size:26px;font-weight:900;letter-spacing:-.5px;margin-bottom:6px}
-  .page-head .sub{color:var(--sub);font-size:14.5px}
+  .page{padding:24px 0 48px}
+  .page-head{margin-bottom:20px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .page-head h1{font-size:24px;font-weight:900;letter-spacing:-.5px;margin-bottom:4px}
+  .page-head .sub{color:var(--sub);font-size:14px}
+  .stat{display:flex;gap:14px;font-size:12.5px;color:var(--sub)}
+  .stat b{color:var(--brand);font-weight:800}
 
   .layout{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
-  @media(max-width:820px){.layout{grid-template-columns:1fr}}
+  @media(max-width:860px){.layout{grid-template-columns:1fr}}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
 
-  /* 左侧知识库 */
-  .side{padding:22px}
-  .side h3{font-size:15px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-  .drop{
-    border:2px dashed var(--line);border-radius:14px;padding:26px 16px;text-align:center;
-    cursor:pointer;transition:.18s;color:var(--sub);font-size:14px;
-  }
+  .side{padding:18px}
+  .side-tabs{display:flex;gap:5px;background:#f4f5f9;border-radius:11px;padding:4px;margin-bottom:16px}
+  .side-tabs button{flex:1;border:none;background:transparent;border-radius:8px;padding:8px;font-size:13px;font-weight:700;color:var(--sub);cursor:pointer;font-family:inherit;transition:.16s}
+  .side-tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+
+  .drop{border:2px dashed var(--line);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;transition:.18s;color:var(--sub);font-size:13.5px}
   .drop:hover,.drop.drag{border-color:var(--brand);background:#f7f8ff;color:var(--brand)}
-  .drop .big{font-size:28px;margin-bottom:6px}
+  .drop .big{font-size:24px;margin-bottom:4px}
   .drop b{color:var(--ink)}
-  .hint{font-size:12px;color:#9aa1b2;margin-top:10px;text-align:center}
+  .hint{font-size:12px;color:#9aa1b2;margin-top:8px;text-align:center}
   input[type=file]{display:none}
 
-  .docs{margin-top:16px;display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto}
-  .doc{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:13.5px}
-  .doc .fi{font-size:18px}
+  .docs{margin-top:14px;display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto}
+  .doc{display:flex;align-items:center;gap:9px;padding:10px 11px;border:1px solid var(--line);border-radius:12px;font-size:13px}
+  .doc .fi{font-size:16px;flex-shrink:0}
   .doc .meta{flex:1;min-width:0}
   .doc .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .doc .st{font-size:12px;color:var(--sub)}
-  .doc .del{background:none;border:none;color:#c0c4cf;cursor:pointer;font-size:16px;padding:2px 4px}
+  .doc .st{font-size:11.5px;color:var(--sub);margin-top:1px}
+  .doc .del{background:none;border:none;color:#c0c4cf;cursor:pointer;font-size:16px;padding:2px 4px;flex-shrink:0}
   .doc .del:hover{color:var(--err)}
-  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:6px}
   .badge.ok{background:#e8f7ee;color:var(--ok)}
-  .badge.load{background:#fef3e2;color:var(--warn)}
+  .badge.load{background:#fef3e2;color:var(--warn);animation:pulse 1.4s infinite}
+  .badge.err{background:#fdeaea;color:var(--err)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
 
-  .side-tip{margin-top:14px;font-size:12px;color:#9aa1b2;line-height:1.5;background:#f7f8fb;border-radius:10px;padding:10px 12px}
+  .side-tip{margin-top:14px;font-size:12px;color:#9aa1b2;line-height:1.55;background:#f7f8fb;border-radius:10px;padding:10px 12px}
 
-  /* 右侧对话 */
-  .chat{display:flex;flex-direction:column;height:calc(100vh - 150px);min-height:520px;overflow:hidden}
-  .chat-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  /* 知识库面板 */
+  .idx{font-size:12.5px;color:var(--sub);background:#f7f8fb;border-radius:10px;padding:11px 12px;margin-bottom:12px;max-height:180px;overflow-y:auto;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+  .pages{display:flex;flex-direction:column;gap:7px;max-height:330px;overflow-y:auto}
+  .page-item{padding:9px 11px;border:1px solid var(--line);border-radius:11px;cursor:pointer;transition:.15s;background:#fff}
+  .page-item:hover{border-color:var(--brand);background:#fafbff}
+  .page-item .pt{font-size:13px;font-weight:700;margin-bottom:2px}
+  .page-item .ps{font-size:11.5px;color:var(--sub);display:flex;align-items:center;gap:6px}
+  .ptype{font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;background:#eef0ff;color:var(--brand);flex-shrink:0}
+
+  /* 对话 */
+  .chat{display:flex;flex-direction:column;height:calc(100vh - 168px);min-height:520px;overflow:hidden}
+  .chat-head{padding:15px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
   .chat-head .t{font-weight:800;font-size:15px}
   .clear{background:none;border:none;color:var(--sub);font-size:13px;cursor:pointer}
   .clear:hover{color:var(--err)}
@@ -74,21 +90,24 @@
   .msgs{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
   .msg{display:flex;gap:10px;max-width:88%}
   .msg.user{align-self:flex-end;flex-direction:row-reverse}
-  .msg .bubble{padding:12px 16px;border-radius:16px;font-size:14.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+  .msg .bubble{padding:12px 16px;border-radius:16px;font-size:14.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
   .msg.ai .bubble{background:#f4f5f9;border-bottom-left-radius:6px}
   .msg.user .bubble{background:var(--brand-grad);color:#fff;border-bottom-right-radius:6px}
-  .msg.ai .avatar,.msg.user .avatar{width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .msg .avatar{width:32px;height:32px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px}
   .msg.ai .avatar{background:#eef0ff}
   .msg.user .avatar{background:var(--brand-grad);color:#fff}
 
   .cite-mini{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
-  .cite-chip{display:inline-flex;align-items:center;gap:3px;background:#eef0ff;color:var(--brand);font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cite-chip{display:inline-flex;align-items:center;gap:3px;background:#eef0ff;color:var(--brand);font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .cite-chip:hover{background:#e0e3ff}
+  .cite-chip.plain{cursor:default;color:var(--sub);background:#f1f2f7}
+  .cite-chip.plain:hover{background:#f1f2f7}
 
   .empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#b4b9c6;text-align:center;padding:30px}
-  .empty .big{font-size:44px;margin-bottom:12px}
-  .empty p{font-size:14px;max-width:300px;line-height:1.6}
+  .empty .big{font-size:42px;margin-bottom:10px}
+  .empty p{font-size:14px;max-width:320px;line-height:1.6}
 
-  .composer{border-top:1px solid var(--line);padding:14px 16px;display:flex;gap:10px;align-items:flex-end}
+  .composer{border-top:1px solid var(--line);padding:13px 16px;display:flex;gap:10px;align-items:flex-end}
   textarea{flex:1;border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:14px;font-family:inherit;resize:none;outline:none;height:48px;max-height:140px;line-height:1.5}
   textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(91,108,255,.12)}
   .send{width:48px;height:48px;border-radius:14px;background:var(--brand-grad);color:#fff;border:none;font-size:18px;cursor:pointer;flex-shrink:0;transition:.18s;display:flex;align-items:center;justify-content:center}
@@ -101,6 +120,25 @@
   .typing span:nth-child(3){animation-delay:.4s}
   @keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
 
+  /* 词条弹窗 */
+  .modal{position:fixed;inset:0;background:rgba(20,24,60,.42);z-index:200;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)}
+  .modal.on{display:flex}
+  .modal-box{background:#fff;border-radius:18px;width:720px;max-width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.22)}
+  .modal-head{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .modal-head .mt{font-weight:800;font-size:16px}
+  .modal-head .x{background:none;border:none;font-size:22px;color:#b4b9c6;cursor:pointer;line-height:1}
+  .modal-head .x:hover{color:var(--ink)}
+  .modal-body{padding:22px;overflow-y:auto;font-size:14px;line-height:1.75}
+  .modal-body h1{font-size:19px;font-weight:800;margin:4px 0 12px}
+  .modal-body h2{font-size:15px;font-weight:800;margin:18px 0 8px;color:var(--brand)}
+  .modal-body h3{font-size:14px;font-weight:700;margin:14px 0 6px}
+  .modal-body ul{margin:6px 0 6px 20px}
+  .modal-body li{margin-bottom:4px}
+  .modal-body code{background:#f4f5f9;padding:1px 5px;border-radius:5px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .modal-body .wl{color:var(--brand);font-weight:700;cursor:pointer;border-bottom:1px dashed var(--brand)}
+  .modal-body .wl:hover{background:#eef0ff}
+  .modal-body .frontmatter{font-size:11.5px;color:#9aa1b2;background:#f7f8fb;border-radius:8px;padding:8px 10px;margin-bottom:14px;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+
   .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:999;padding:10px 20px;border-radius:12px;font-size:14px;font-weight:600;color:#fff;transition:.3s;opacity:0;pointer-events:none;max-width:90vw;text-align:center}
 </style>
 </head>
@@ -109,27 +147,49 @@
   <div class="wrap nav">
     <a class="back" href="index.html">← 返回首页</a>
     <div class="logo"><span class="mark">✦</span> 知识库问答</div>
-    <div style="width:70px"></div>
+    <div class="user-area">
+      <span class="em" id="userEmail"></span>
+      <button class="btn-ghost" id="logoutBtn">退出</button>
+    </div>
   </div>
 </header>
 
 <div class="wrap page">
   <div class="page-head">
-    <h1>📚 知识库问答（RAG）</h1>
-    <div class="sub">上传文档，AI 将基于你的资料精准回答，并标注引用来源。</div>
+    <div>
+      <h1>📚 知识库问答</h1>
+      <div class="sub">上传文档 → 自动编译成知识库 → 基于你的资料回答并标注引用词条</div>
+    </div>
+    <div class="stat">
+      <span>文档 <b id="statDocs">0</b></span>
+      <span>词条 <b id="statPages">0</b></span>
+      <span id="statCompiling"></span>
+    </div>
   </div>
 
   <div class="layout">
     <div class="card side">
-      <h3>📁 我的文档</h3>
-      <div class="drop" id="dropZone">
-        <div class="big">📄</div>
-        <div>点击或拖拽上传 <b>PDF / TXT</b></div>
+      <div class="side-tabs">
+        <button id="tabDocs" class="on" onclick="switchPane('docs')">📁 文档</button>
+        <button id="tabWiki" onclick="switchPane('wiki')">🧠 知识库</button>
       </div>
-      <input type="file" id="fileInput" accept=".pdf,.txt,.md" multiple>
-      <div class="hint">支持 PDF、TXT、Markdown，单个 ≤ 10MB</div>
-      <div class="docs" id="docList"></div>
-      <div class="side-tip">💡 文档仅在浏览器本地解析，检索命中的片段会随问题一起发送给 AI 用于回答，并标注来源。</div>
+
+      <div id="paneDocs">
+        <div class="drop" id="dropZone">
+          <div class="big">📄</div>
+          <div>点击或拖拽上传 <b>PDF / TXT / MD</b></div>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf,.txt,.md" multiple>
+        <div class="hint">上传后自动编译成知识库（约 1~2 分钟）</div>
+        <div class="docs" id="docList"></div>
+        <div class="side-tip">💡 文档保存在你的账号里，编译成词条后可以反复提问，换台设备登录也能继续用。编译期间也能提问，会先按原文回答。</div>
+      </div>
+
+      <div id="paneWiki" style="display:none">
+        <div class="idx" id="wikiIndex">（知识库还没有内容）</div>
+        <div class="pages" id="pageList"></div>
+        <div class="side-tip">💡 词条由 AI 从你的文档中提炼，并用 <b>[[双向链接]]</b> 互相关联；点任意词条可查看原文。</div>
+      </div>
     </div>
 
     <div class="card chat">
@@ -140,181 +200,277 @@
       <div class="msgs" id="msgs">
         <div class="empty" id="empty">
           <div class="big">🔍</div>
-          <p>上传文档后，在下方输入你的问题<br>AI 会从文档中检索相关内容并回答</p>
+          <p>上传文档并等待编译完成后<br>在下方提问，AI 会基于你的知识库回答</p>
         </div>
       </div>
       <div class="composer">
-        <textarea id="input" placeholder="输入你的问题，例如：这份文档主要讲了什么？" rows="1"></textarea>
+        <textarea id="input" placeholder="输入你的问题，例如：这份文档的核心结论是什么？" rows="1"></textarea>
         <button class="send" id="sendBtn">➤</button>
       </div>
     </div>
   </div>
 </div>
 
+<div class="modal" id="pageModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="mt" id="modalTitle">词条</span>
+      <button class="x" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
 <script>
-// ===== AI 通过本地后端代理调用 Agnes（Key 在服务器端，不暴露给前端） =====
-const AI_MODEL = 'agnes-3.0-flash';
-
 // ===== 状态 =====
-let docs = [];        // {id, name, type, status, chunks:[{text, src}]}
+const AI_MODEL = 'agnes-3.0-flash';
+let me = null;
+let docs = [];
+let wiki = { index: '', pages: [], log: '' };
+let pollTimer = null;
 
-// ===== 工具函数 =====
+// ===== 工具 =====
 function toast(msg, type){
   let el = document.getElementById('toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.className = 'toast';
-    document.body.appendChild(el);
-  }
+  if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); }
   el.textContent = msg;
   el.style.background = type === 'error' ? 'var(--err)' : (type === 'warn' ? 'var(--warn)' : 'var(--brand)');
   el.style.opacity = '1';
   clearTimeout(el._t);
-  el._t = setTimeout(() => el.style.opacity = '0', 2800);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 2800);
 }
+function autoResize(ta){ ta.style.height='auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function extOf(name){ return (name.split('.').pop() || '').toLowerCase(); }
 
-function autoResize(ta){
-  ta.style.height = 'auto';
-  ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
-}
-
-// ===== 文档解析 =====
-async function loadPdfText(file){
-  const url = URL.createObjectURL(file);
+// ===== 认证 =====
+async function initAuth(){
   try {
-    const pdfjsLib = window.pdfjsLib;
-    if (!pdfjsLib) throw new Error('pdf');
-    const pdf = await pdfjsLib.getDocument(url).promise;
-    let text = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      text += content.items.map(it => it.str).join(' ') + '\n';
-    }
-    return text;
-  } finally {
-    URL.revokeObjectURL(url);
+    const r = await fetch('/api/auth/me');
+    const d = await r.json();
+    if (!d || !d.user) { location.replace('login.html?next=rag.html'); return false; }
+    me = d.user;
+    document.getElementById('userEmail').textContent = me.email;
+    return true;
+  } catch (e) {
+    location.replace('login.html?next=rag.html');
+    return false;
   }
 }
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+  location.replace('login.html');
+});
 
+// ===== 文件解析（浏览器本地）=====
 function loadPdfLib(){
   return new Promise((resolve, reject) => {
     if (window.pdfjsLib) return resolve();
     const s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error('pdf 解析库加载失败，请检查网络'));
+    s.onerror = () => reject(new Error('PDF 解析库加载失败，请检查网络'));
     document.head.appendChild(s);
   });
 }
 
-function chunkText(text, size = 600, overlap = 80){
-  text = text.replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').trim();
-  if (!text) return [];
-  const chunks = [];
-  // 优先按段落切分，长段落再按长度切
-  const paragraphs = text.split(/\n+/).map(p => p.trim()).filter(p => p.length > 0);
-  let buf = '';
-  const flush = () => {
-    if (buf.trim()) chunks.push(buf.trim());
-    buf = '';
-  };
-  for (const p of paragraphs) {
-    if (p.length > size) {
-      flush();
-      let start = 0;
-      while (start < p.length) {
-        chunks.push(p.slice(start, start + size));
-        start += size - overlap;
-      }
-    } else {
-      if ((buf + '\n' + p).length > size) flush();
-      buf = buf ? buf + '\n' + p : p;
+async function pdfToText(file){
+  const url = URL.createObjectURL(file);
+  try {
+    await loadPdfLib();
+    const pdf = await window.pdfjsLib.getDocument(url).promise;
+    let out = '';
+    for (let i = 1; i <= pdf.numPages; i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      out += content.items.map(it => it.str).join(' ') + '\n\n';
     }
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
   }
-  flush();
-  return chunks.map(t => ({ text: t, src: '' }));
 }
 
+// ===== 上传到服务器（保存 + 触发编译）=====
 async function handleFiles(files){
-  for (const file of files) {
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (!['pdf','txt','md'].includes(ext)) { toast('仅支持 PDF/TXT/MD', 'warn'); continue; }
+  for (const file of files){
+    const ext = extOf(file.name);
+    if (!['pdf','txt','md'].includes(ext)) { toast('仅支持 PDF / TXT / MD', 'warn'); continue; }
     if (file.size > 10 * 1024 * 1024) { toast(`"${file.name}" 超过 10MB`, 'warn'); continue; }
-    const id = Date.now() + '' + Math.random().toString(36).slice(2,7);
-    docs.push({ id, name: file.name, type: ext, status: 'loading', chunks: [] });
-    renderDocs();
+
+    toast(`正在解析 ${file.name}…`);
     try {
-      let text;
-      if (ext === 'pdf') {
-        try { await loadPdfLib(); text = await loadPdfText(file); }
-        catch(e){ throw new Error('PDF 解析失败，请换用 TXT 试试'); }
-      } else {
-        text = await file.text();
-      }
-      const chunks = chunkText(text);
-      if (chunks.length === 0) throw new Error('未能提取到文本内容');
-      chunks.forEach(c => c.src = file.name);
-      const doc = docs.find(d => d.id === id);
-      doc.chunks = chunks;
-      doc.status = 'done';
-    } catch(e) {
-      const doc = docs.find(d => d.id === id);
-      doc.status = 'error';
-      doc.error = e.message;
+      const text = ext === 'pdf' ? await pdfToText(file) : await file.text();
+      if (!text || !text.trim()) throw new Error('未能提取到文本内容');
+
+      const res = await fetch('/api/docs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, type: ext, text })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '上传失败');
+
+      toast(`已上传，正在编译成知识库（约 1~2 分钟）…`);
+      await loadDocs();
+      await loadWiki();
+      startPolling();
+    } catch (e) {
+      toast(`"${file.name}" 失败：${e.message}`, 'error');
     }
-    renderDocs();
   }
+}
+
+// ===== 文档列表 =====
+const EMOJI = { pdf:'📕', txt:'📄', md:'📘' };
+
+async function loadDocs(){
+  const r = await fetch('/api/docs');
+  if (r.status === 401) { location.replace('login.html?next=rag.html'); return; }
+  const d = await r.json();
+  docs = d.docs || [];
+  renderDocs();
+  updateStats(d.queue);
 }
 
 function renderDocs(){
   const list = document.getElementById('docList');
-  const emoji = { pdf:'📕', txt:'📄', md:'📘' };
-  list.innerHTML = docs.map(d => `
-    <div class="doc">
-      <span class="fi">${emoji[d.type] || '📄'}</span>
+  if (!docs.length) { list.innerHTML = '<div style="font-size:12.5px;color:#9aa1b2;text-align:center;padding:14px 0">还没有文档</div>'; return; }
+
+  list.innerHTML = docs.map(d => {
+    let st;
+    if (d.status === 'done') st = `<span class="badge ok">${d.pageCount} 个词条</span> <span style="color:#9aa1b2">${d.chunkCount} 段</span>`;
+    else if (d.status === 'compiling') st = '<span class="badge load">编译中…</span>';
+    else if (d.status === 'pending') st = '<span class="badge load">排队中…</span>';
+    else st = `<span class="badge err">编译失败</span> <span style="color:var(--err)" title="${escapeHtml(d.error||'')}">${escapeHtml((d.error||'').slice(0,18))}</span>`;
+
+    return `<div class="doc">
+      <span class="fi">${EMOJI[d.type] || '📄'}</span>
       <div class="meta">
-        <div class="nm">${d.name}</div>
-        <div class="st">${
-          d.status === 'loading' ? '<span class="badge load">解析中…</span>' :
-          d.status === 'done' ? `<span class="badge ok">${d.chunks.length} 段 · 已就绪</span>` :
-          `<span style="color:var(--err)">${d.error || '解析失败'}</span>`
-        }</div>
+        <div class="nm" title="${escapeHtml(d.name)}">${escapeHtml(d.name)}</div>
+        <div class="st">${st}</div>
       </div>
-      <button class="del" onclick="removeDoc('${d.id}')">×</button>
-    </div>
-  `).join('');
+      <button class="del" onclick="removeDoc('${d.id}')" title="删除">×</button>
+    </div>`;
+  }).join('');
 }
 
-function removeDoc(id){
-  docs = docs.filter(d => d.id !== id);
-  renderDocs();
+async function removeDoc(id){
+  if (!confirm('删除这份文档？已编译的词条会保留（可在知识库中查看）')) return;
+  const r = await fetch('/api/docs/' + id, { method: 'DELETE' });
+  if (!r.ok) { toast('删除失败', 'error'); return; }
+  toast('已删除');
+  await loadDocs();
+  await loadWiki();
 }
 
-function totalChunks(){ return docs.reduce((n,d) => n + d.chunks.length, 0); }
-
-// ===== 检索 =====
-function tokenize(s){
-  return (s.toLowerCase().match(/[\u4e00-\u9fa5]|[a-z0-9]+/g) || []);
+function updateStats(queue){
+  document.getElementById('statDocs').textContent = docs.length;
+  document.getElementById('statPages').textContent = wiki.pages ? wiki.pages.length : 0;
+  const busy = docs.filter(d => d.status === 'compiling' || d.status === 'pending').length;
+  document.getElementById('statCompiling').innerHTML = busy ? `<span style="color:var(--warn)">编译中 ${busy}</span>` : '';
 }
-function search(query, topK = 4){
-  const qTokens = new Set(tokenize(query));
-  const scored = [];
-  for (const d of docs) {
-    if (d.status !== 'done') continue;
-    for (const c of d.chunks) {
-      let score = 0;
-      const cTokens = tokenize(c.text);
-      const cSet = new Set(cTokens);
-      for (const t of qTokens) {
-        if (cSet.has(t)) score += 2;
-        else if (c.text.toLowerCase().includes(t)) score += 1;
-      }
-      if (score > 0) scored.push({ text: c.text, src: c.src, score });
-    }
+
+// 有文档在编译时轮询
+function startPolling(){
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    const busy = docs.some(d => d.status === 'compiling' || d.status === 'pending');
+    if (!busy) { clearInterval(pollTimer); pollTimer = null; return; }
+    const known = docs.filter(d => d.status === 'compiling' || d.status === 'pending').map(d => d.status);
+    await loadDocs();
+    await loadWiki();
+    const nowBusy = docs.filter(d => d.status === 'compiling' || d.status === 'pending').length;
+    if (known.length && !nowBusy) toast('知识库编译完成 ✅');
+  }, 3000);
+}
+
+// ===== 知识库 =====
+async function loadWiki(){
+  const r = await fetch('/api/wiki');
+  if (r.status === 401) return;
+  wiki = await r.json();
+  renderWiki();
+}
+
+function renderWiki(){
+  const idxEl = document.getElementById('wikiIndex');
+  const listEl = document.getElementById('pageList');
+
+  idxEl.textContent = (wiki.index || '').replace(/<!--[\s\S]*?-->/g, '').trim() || '（知识库还没有内容）';
+
+  if (!wiki.pages.length) {
+    listEl.innerHTML = '<div style="font-size:12.5px;color:#9aa1b2;text-align:center;padding:14px 0">上传文档后自动生成词条</div>';
+  } else {
+    listEl.innerHTML = wiki.pages.map(p => `
+      <div class="page-item" onclick="openPage('${encodeURIComponent(p.slug)}')">
+        <div class="pt">${escapeHtml(p.title)}</div>
+        <div class="ps"><span class="ptype">${escapeHtml(p.type)}</span><span>${escapeHtml(p.summary || '')}</span></div>
+      </div>`).join('');
   }
-  scored.sort((a,b) => b.score - a.score);
-  return scored.slice(0, topK);
+  updateStats();
+}
+
+// ===== 词条详情 =====
+function renderMarkdown(md){
+  let body = md.replace(/^---[\s\S]*?---\s*/,'');
+  const fm = (md.match(/^---([\s\S]*?)---/) || [])[1];
+  let html = '';
+  if (fm) html += `<div class="frontmatter">${escapeHtml(fm.trim())}</div>`;
+
+  const lines = body.split('\n');
+  let inList = false;
+  for (let raw of lines){
+    let line = escapeHtml(raw);
+    line = line.replace(/\[\[([^\]]+)\]\]/g, (m, t) => `<span class="wl" onclick="openPageByTitle('${t.replace(/'/g,"\\'")}')">${t}</span>`);
+    line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    line = line.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    if (/^\s*[-*]\s+/.test(raw)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${line.replace(/^\s*[-*]\s+/, '')}</li>`;
+      continue;
+    }
+    if (inList) { html += '</ul>'; inList = false; }
+
+    if (/^###\s/.test(raw)) html += `<h3>${line.replace(/^###\s/, '')}</h3>`;
+    else if (/^##\s/.test(raw)) html += `<h2>${line.replace(/^##\s/, '')}</h2>`;
+    else if (/^#\s/.test(raw)) html += `<h1>${line.replace(/^#\s/, '')}</h1>`;
+    else if (raw.trim()) html += `<p>${line}</p>`;
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+async function openPage(encSlug){
+  const slug = decodeURIComponent(encSlug);
+  const r = await fetch('/api/wiki/page/' + encodeURIComponent(slug));
+  if (!r.ok) { toast('词条不存在', 'warn'); return; }
+  const d = await r.json();
+  const title = ((d.content.match(/^title:\s*(.+)$/m) || [])[1] || slug).trim();
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = renderMarkdown(d.content);
+  document.getElementById('pageModal').classList.add('on');
+}
+
+function openPageByTitle(title){
+  const p = wiki.pages.find(x => x.title === title);
+  if (p) openPage(encodeURIComponent(p.slug));
+  else toast(`词条「${title}」尚未创建`, 'warn');
+}
+
+function closeModal(){ document.getElementById('pageModal').classList.remove('on'); }
+document.getElementById('pageModal').addEventListener('click', e => {
+  if (e.target.id === 'pageModal') closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function switchPane(which){
+  const isDocs = which === 'docs';
+  document.getElementById('paneDocs').style.display = isDocs ? 'block' : 'none';
+  document.getElementById('paneWiki').style.display = isDocs ? 'none' : 'block';
+  document.getElementById('tabDocs').classList.toggle('on', isDocs);
+  document.getElementById('tabWiki').classList.toggle('on', !isDocs);
 }
 
 // ===== 对话 =====
@@ -325,24 +481,23 @@ function addMsg(role, content, cites){
   const div = document.createElement('div');
   div.className = 'msg ' + role;
   const avatar = role === 'ai' ? '✦' : '我';
+
   let citesHtml = '';
-  if (cites && cites.length) {
-    // 紧凑来源：去重后只显示文件名胶囊
-    const names = [...new Set(cites.map(c => c.src))];
-    citesHtml = '<div class="cite-mini">' + names.map(n =>
-      `<span class="cite-chip">📎 ${escapeHtml(n)}</span>`
-    ).join('') + '</div>';
+  if (cites && cites.length){
+    citesHtml = '<div class="cite-mini">' + cites.map(c => {
+      const p = wiki.pages.find(x => x.title === c.label);
+      const cls = p ? 'cite-chip' : 'cite-chip plain';
+      const click = p ? ` onclick="openPage('${encodeURIComponent(p.slug)}')"` : '';
+      return `<span class="${cls}"${click}>📎 ${escapeHtml(c.label)}</span>`;
+    }).join('') + '</div>';
   }
+
   div.innerHTML = `<div class="avatar">${avatar}</div><div><div class="bubble"></div>${citesHtml}</div>`;
   const bubble = div.querySelector('.bubble');
   bubble.textContent = content;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
   return bubble;
-}
-
-function escapeHtml(s){
-  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 function addTyping(){
@@ -354,112 +509,103 @@ function addTyping(){
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
 }
-function removeTyping(){
-  const t = document.getElementById('typing');
-  if (t) t.remove();
-}
+function removeTyping(){ const t = document.getElementById('typing'); if (t) t.remove(); }
 
 async function ask(){
   const input = document.getElementById('input');
   const q = input.value.trim();
   if (!q) return;
-  if (totalChunks() === 0) { toast('请先上传文档', 'warn'); return; }
+
+  const hasPages = wiki.pages && wiki.pages.length;
+  const hasDocs = docs.length;
+  if (!hasPages && !hasDocs) { toast('请先上传文档', 'warn'); return; }
 
   input.value = '';
   autoResize(input);
   addMsg('user', q);
 
-  // 检索
-  const hits = search(q, 4);
-  const cites = hits.map(h => ({ src: h.src, text: h.text }));
-
   const sendBtn = document.getElementById('sendBtn');
   sendBtn.disabled = true;
   addTyping();
 
-  let context = hits.map((h,i) => `[资料${i+1} 来源:${h.src}]\n${h.text}`).join('\n\n');
-  const systemPrompt = '你是知识库问答助手。请严格基于用户提供的【资料】内容回答问题，用简体中文，条理清晰。若资料不足以回答，请明确说明"资料中未找到相关内容"，不要编造。回答末尾不要重复引用。';
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: `【资料】\n${context}\n\n【问题】\n${q}` }
-  ];
-
-  removeTyping();
-  const bubble = addMsg('ai', '', cites.length ? cites : null);
+  let bubble = null;
+  let full = '';
 
   try {
-    let full = '';
-    await streamChat(messages, (delta) => {
-      full += delta;
-      bubble.textContent = full;
-      const msgs = document.getElementById('msgs');
-      msgs.scrollTop = msgs.scrollHeight;
+    const res = await fetch('/api/rag/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q })
     });
-    if (!full) bubble.textContent = '（模型未返回内容，请重试）';
-  } catch(e) {
-    bubble.textContent = '请求失败：' + (e.message || '网络错误');
-    bubble.style.color = 'var(--err)';
+
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      removeTyping();
+      const b = addMsg('ai', d.error || '请求失败');
+      b.style.color = 'var(--err)';
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true){
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop() || '';
+
+      for (const line of lines){
+        const t = line.trim();
+        if (!t.startsWith('data:')) continue;
+        let j;
+        try { j = JSON.parse(t.slice(5).trim()); } catch(e){ continue; }
+
+        if (j.type === 'meta'){
+          removeTyping();
+          const cites = (j.titles || []).map(x => ({ label: x }));
+          bubble = addMsg('ai', '', cites);
+          if (full) bubble.textContent = full;
+        } else if (j.type === 'delta'){
+          full += j.text;
+          if (!bubble) { removeTyping(); bubble = addMsg('ai', ''); }
+          bubble.textContent = full;
+          const msgs = document.getElementById('msgs');
+          msgs.scrollTop = msgs.scrollHeight;
+        } else if (j.type === 'error'){
+          removeTyping();
+          const b = bubble || addMsg('ai', '');
+          bubble = b;
+          b.textContent = '回答失败：' + j.message;
+          b.style.color = 'var(--err)';
+        }
+      }
+    }
+
+    removeTyping();
+    if (!bubble) bubble = addMsg('ai', '');
+    if (!full && bubble.textContent === '') bubble.textContent = '（模型未返回内容，请重试）';
+  } catch (e){
+    removeTyping();
+    const b = bubble || addMsg('ai', '');
+    b.textContent = '请求失败：' + (e.message || '网络错误');
+    b.style.color = 'var(--err)';
   } finally {
     sendBtn.disabled = false;
   }
 }
 
-// 通过本地后端代理调用 Agnes（流式 SSE）
-async function streamChat(messages, onDelta){
-  const resp = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, stream: true })
-  });
-
-  if (!resp.ok) {
-    let msg = '请求失败（' + resp.status + '）';
-    try {
-      const j = await resp.json();
-      msg = j.error || j.detail || msg;
-    } catch(e) {}
-    throw new Error(msg);
-  }
-
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-
-    // 按 SSE 帧解析
-    const lines = buf.split('\n');
-    buf = lines.pop() || ''; // 最后一行可能不完整，留到下次
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith('data:')) continue;
-      const data = trimmed.slice(5).trim();
-      if (data === '[DONE]') return;
-      try {
-        const json = JSON.parse(data);
-        const delta = json.choices?.[0]?.delta?.content;
-        if (delta) onDelta(delta);
-      } catch(e) {
-        // 忽略无法解析的帧
-      }
-    }
-  }
-}
-
 function clearChat(){
-  const msgs = document.getElementById('msgs');
-  msgs.innerHTML = `<div class="empty" id="empty"><div class="big">🔍</div><p>上传文档后，在下方输入你的问题<br>AI 会从文档中检索相关内容并回答</p></div>`;
+  document.getElementById('msgs').innerHTML = `<div class="empty" id="empty"><div class="big">🔍</div><p>上传文档并等待编译完成后<br>在下方提问，AI 会基于你的知识库回答</p></div>`;
 }
 
 // ===== 事件绑定 =====
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 dropZone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => { handleFiles(e.target.files); e.target.value=''; });
+fileInput.addEventListener('change', e => { handleFiles(e.target.files); e.target.value = ''; });
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
 dropZone.addEventListener('drop', e => {
@@ -474,6 +620,15 @@ input.addEventListener('keydown', e => {
 });
 document.getElementById('sendBtn').addEventListener('click', ask);
 document.getElementById('clearChat').addEventListener('click', clearChat);
+
+// ===== 启动 =====
+(async () => {
+  const ok = await initAuth();
+  if (!ok) return;
+  await loadWiki();
+  await loadDocs();
+  startPolling();
+})();
 </script>
 </body>
 </html>

@@ -1,185 +1,317 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// ===== 加载 .env（零依赖） =====
-// Node 20.12+ 用内置 process.loadEnvFile；旧版本回退到手动解析，保证任何 Node 18+ 都能跑
-const envPath = path.join(__dirname, '.env');
-if (fs.existsSync(envPath)) {
-  if (typeof process.loadEnvFile === 'function') {
-    try {
-      process.loadEnvFile(envPath);
-    } catch (e) {
-      console.error('[env] .env 解析失败，将依赖系统环境变量:', e.message);
-    }
-  } else {
-    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-      if (!m) continue;
-      let val = m[2].trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      if (process.env[m[1]] === undefined) process.env[m[1]] = val;
-    }
-  }
-}
+import { llmConfig, pipeStream, chat, ROOT } from './lib/llm.js';
+import * as store from './lib/store.js';
+import * as auth from './lib/auth.js';
+import * as wiki from './lib/wiki.js';
+import { chunkText } from './lib/chunk.js';
 
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '20mb' }));
 
 const PORT = process.env.PORT || 3000;
+const MAX_DOC_CHARS = Math.max(100000, Number(process.env.MAX_DOC_CHARS || 1500000));
 
-// Agnes 配置
-const AGNES_API_KEY = process.env.AGNES_API_KEY || '';
-const AGNES_BASE_URL = process.env.AGNES_BASE_URL || 'https://apihub.agnes-ai.com/v1';
-const AGNES_MODEL = process.env.AGNES_MODEL || 'agnes-3.0-flash';
-// 上游重试次数（国内服务器访问境外接口偶发抖动，靠重试吸收）
-const UPSTREAM_RETRY = Math.max(1, Number(process.env.UPSTREAM_RETRY || 3));
+// ============================================================
+// 认证
+// ============================================================
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// ===== 调用 Agnes（带自动重试 + 详细错误日志） =====
-async function callAgnes(payload) {
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= UPSTREAM_RETRY; attempt++) {
-    try {
-      const res = await fetch(`${AGNES_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${AGNES_API_KEY}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      // 5xx = 上游临时故障，可重试；4xx = 请求本身问题，直接返回给调用方
-      if (res.status >= 500 && attempt < UPSTREAM_RETRY) {
-        console.error(`[Agnes] 第 ${attempt} 次返回 ${res.status}，准备重试`);
-        await res.text().catch(() => {});
-        await sleep(300 * attempt);
-        continue;
-      }
-      return res;
-    } catch (e) {
-      lastError = e;
-      const c = e.cause;
-      const causeText = c ? `${c.code || ''}${c.message ? ' ' + c.message : ''}`.trim() : '';
-      console.error(
-        `[Agnes] 第 ${attempt}/${UPSTREAM_RETRY} 次请求失败: ${e.message}` +
-          (causeText ? ` | 底层原因: ${causeText}` : '')
-      );
-      if (attempt < UPSTREAM_RETRY) await sleep(300 * attempt);
-    }
-  }
-
-  const c = lastError && lastError.cause;
-  const detail = c ? `${c.code || ''}${c.message ? ' ' + c.message : ''}`.trim() : '';
-  const err = new Error('连接模型服务失败' + (detail ? `（${detail}）` : ''));
-  err.cause = c;
-  throw err;
-}
-
-// ===== AI 代理接口（关键：Key 只存在服务器端） =====
-app.post('/api/chat', async (req, res) => {
+app.post('/api/auth/register', (req, res) => {
   try {
-    if (!AGNES_API_KEY) {
-      return res.status(500).json({ error: '服务器未配置 AGNES_API_KEY' });
-    }
+    const { email, password } = req.body || {};
+    const mail = auth.validateEmail(email);
+    if (!mail) return res.status(400).json({ error: '邮箱格式不正确' });
+    const pwdErr = auth.validatePassword(password);
+    if (pwdErr) return res.status(400).json({ error: pwdErr });
+    if (store.findUserByEmail(mail)) return res.status(409).json({ error: '该邮箱已注册，请直接登录' });
 
-    const { messages, temperature, max_tokens, stream = false } = req.body || {};
+    const { hash, salt } = auth.hashPassword(password);
+    const user = store.createUser({ email: mail, passwordHash: hash, salt });
+    const session = store.createSession(user.id);
+    auth.setSessionCookie(res, session.token);
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({ error: '缺少 messages 参数' });
-    }
-
-    const upstream = await callAgnes({
-      model: AGNES_MODEL,
-      messages,
-      temperature: temperature ?? 0.7,
-      max_tokens: max_tokens ?? 2048,
-      stream,
-    });
-
-    if (!upstream.ok) {
-      const errText = await upstream.text();
-      console.error(`[Agnes] 上游错误 ${upstream.status}:`, errText.slice(0, 500));
-      return res.status(upstream.status).json({
-        error: `模型服务返回错误（${upstream.status}）`,
-        detail: errText.slice(0, 300),
-      });
-    }
-
-    // 流式：直接透传 SSE
-    if (stream) {
-      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders();
-
-      const reader = upstream.body.getReader();
-      const decoder = new TextDecoder();
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const text = decoder.decode(value, { stream: true });
-          res.write(text);
-        }
-      } catch (e) {
-        console.error('[Agnes] 流读取中断:', e.message);
-      }
-      res.end();
-      return;
-    }
-
-    // 非流式：返回完整 JSON
-    const data = await upstream.json();
-    return res.json(data);
+    return res.json({ ok: true, user: { id: user.id, email: user.email } });
   } catch (e) {
-    console.error('[Agnes] 代理异常:', e.message);
-    return res.status(502).json({
-      error: `模型服务暂时连不上（已重试 ${UPSTREAM_RETRY} 次），请稍后重试`,
-      detail: e.message,
-    });
+    console.error('[auth] 注册异常:', e.message);
+    return res.status(500).json({ error: '注册失败，请稍后重试' });
   }
 });
 
-// ===== 健康检查 =====
-app.get('/api/health', (req, res) => {
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    const mail = auth.validateEmail(email);
+    if (!mail || !password) return res.status(400).json({ error: '请输入邮箱和密码' });
+
+    const user = store.findUserByEmail(mail);
+    if (!user || !auth.verifyPassword(password, user.passwordHash, user.salt)) {
+      return res.status(401).json({ error: '邮箱或密码不正确' });
+    }
+    const session = store.createSession(user.id);
+    auth.setSessionCookie(res, session.token);
+    return res.json({ ok: true, user: { id: user.id, email: user.email } });
+  } catch (e) {
+    console.error('[auth] 登录异常:', e.message);
+    return res.status(500).json({ error: '登录失败，请稍后重试' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const ctx = auth.currentUser(req);
+  if (ctx) store.deleteSession(ctx.token);
+  auth.clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const ctx = auth.currentUser(req);
+  if (!ctx) return res.json({ user: null });
+  res.json({ user: { id: ctx.user.id, email: ctx.user.email, createdAt: ctx.user.createdAt } });
+});
+
+// ============================================================
+// 文档（每个用户私有）
+// ============================================================
+
+app.get('/api/docs', auth.requireAuth, (req, res) => {
+  const docs = store.listDocs(req.user.id).map((d) => ({
+    id: d.id,
+    name: d.name,
+    type: d.type,
+    chars: d.chars,
+    chunkCount: d.chunkCount,
+    status: d.status,
+    error: d.error,
+    pageCount: (d.pageSlugs || []).length,
+    createdAt: d.createdAt,
+    compiledAt: d.compiledAt,
+  }));
+  res.json({ docs, queue: wiki.queueStatus() });
+});
+
+app.post('/api/docs', auth.requireAuth, (req, res) => {
+  try {
+    const { name, type, text } = req.body || {};
+    const docName = String(name || '').trim().slice(0, 200) || '未命名文档';
+    const content = String(text || '');
+
+    if (!content.trim()) return res.status(400).json({ error: '未能提取到文本内容' });
+    if (content.length > MAX_DOC_CHARS) {
+      return res.status(413).json({ error: `文档过长（${content.length} 字），请拆分后再上传` });
+    }
+
+    const chunks = chunkText(content);
+    if (!chunks.length) return res.status(400).json({ error: '切分后内容为空' });
+
+    const doc = store.createDoc({
+      userId: req.user.id,
+      name: docName,
+      type: String(type || 'txt').toLowerCase().slice(0, 10),
+      chars: content.length,
+      chunkCount: chunks.length,
+    });
+    store.saveContent(doc.id, chunks);
+
+    // 异步入队编译，立即返回，前端轮询状态
+    wiki.enqueueCompile(req.user.id, doc.id);
+
+    res.json({ ok: true, doc: { id: doc.id, name: doc.name, status: doc.status, chunkCount: chunks.length } });
+  } catch (e) {
+    console.error('[docs] 保存异常:', e.message);
+    res.status(500).json({ error: '保存失败，请稍后重试' });
+  }
+});
+
+app.get('/api/docs/:id', auth.requireAuth, (req, res) => {
+  const doc = store.getDoc(req.user.id, req.params.id);
+  if (!doc) return res.status(404).json({ error: '文档不存在' });
+  const chunks = store.loadContent(doc.id) || [];
+  res.json({ doc, text: chunks.map((c) => (typeof c === 'string' ? c : c.text)).join('\n\n') });
+});
+
+app.delete('/api/docs/:id', auth.requireAuth, (req, res) => {
+  const ok = store.deleteDoc(req.user.id, req.params.id);
+  if (!ok) return res.status(404).json({ error: '文档不存在' });
+  // 删掉文档后重建目录，让 index 与实际词条保持一致
+  wiki.enqueueReindex(req.user.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/docs/:id/recompile', auth.requireAuth, (req, res) => {
+  const doc = store.getDoc(req.user.id, req.params.id);
+  if (!doc) return res.status(404).json({ error: '文档不存在' });
+  wiki.enqueueCompile(req.user.id, doc.id);
+  res.json({ ok: true, status: 'pending' });
+});
+
+// ============================================================
+// Wiki 知识库
+// ============================================================
+
+app.get('/api/wiki', auth.requireAuth, (req, res) => {
+  const pages = store.listPages(req.user.id).map((slug) => {
+    const raw = store.readPage(req.user.id, slug) || '';
+    return {
+      slug,
+      title: ((raw.match(/^title:\s*(.+)$/m) || [])[1] || slug).trim(),
+      type: ((raw.match(/^type:\s*(.+)$/m) || [])[1] || 'concept').trim(),
+      summary: ((raw.match(/^summary:\s*(.+)$/m) || [])[1] || '').trim(),
+      updated: ((raw.match(/^updated:\s*(.+)$/m) || [])[1] || '').trim(),
+    };
+  });
   res.json({
-    ok: true,
-    model: AGNES_MODEL,
-    keyConfigured: !!AGNES_API_KEY,
-    upstreamRetry: UPSTREAM_RETRY,
+    index: store.readWikiFile(req.user.id, 'index.md') || '',
+    pages,
+    log: store.readWikiFile(req.user.id, 'log.md') || '',
   });
 });
 
-// ===== 安全拦截：禁止访问点开头文件（.env / .git / .workbuddy）与 node_modules =====
+app.get('/api/wiki/page/:slug', auth.requireAuth, (req, res) => {
+  const raw = store.readPage(req.user.id, req.params.slug);
+  if (!raw) return res.status(404).json({ error: '词条不存在' });
+  res.json({ slug: req.params.slug, content: raw });
+});
+
+app.get('/api/wiki/lint', auth.requireAuth, (req, res) => {
+  res.json(wiki.lintWiki(req.user.id));
+});
+
+// ============================================================
+// RAG 问答（基于已编译的 wiki）
+// ============================================================
+
+app.post('/api/rag/ask', auth.requireAuth, async (req, res) => {
+  const { question } = req.body || {};
+  const q = String(question || '').trim();
+  if (!q) return res.status(400).json({ error: '请输入问题' });
+  if (q.length > 2000) return res.status(400).json({ error: '问题过长' });
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (obj) => {
+    try {
+      res.write(`data: ${JSON.stringify(obj)}\n\n`);
+    } catch (e) {}
+  };
+
+  try {
+    await wiki.answerFromWiki(
+      req.user.id,
+      q,
+      (delta) => send({ type: 'delta', text: delta }),
+      (meta) => send({ type: 'meta', ...meta })
+    );
+    send({ type: 'done' });
+  } catch (e) {
+    console.error('[rag] 回答异常:', e.message);
+    send({ type: 'error', message: e.message || '模型服务异常' });
+  } finally {
+    res.end();
+  }
+});
+
+// ============================================================
+// 通用 AI 代理（周报生成器使用）
+// ============================================================
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    if (!llmConfig.API_KEY) return res.status(500).json({ error: '服务器未配置 AGNES_API_KEY' });
+    const { messages, temperature, max_tokens, stream = false } = req.body || {};
+    if (!Array.isArray(messages) || !messages.length) {
+      return res.status(400).json({ error: '缺少 messages 参数' });
+    }
+
+    const opts = {
+      temperature: temperature ?? 0.7,
+      maxTokens: max_tokens ?? 2048,
+    };
+
+    // 流式：直接透传上游 SSE
+    if (stream) {
+      await pipeStream(messages, res, opts);
+      return;
+    }
+
+    const text = await chat(messages, opts);
+    res.json({ choices: [{ message: { role: 'assistant', content: text } }] });
+  } catch (e) {
+    console.error('[chat] 异常:', e.message);
+    if (!res.headersSent) {
+      res.status(e.status || 502).json({ error: e.message || '模型服务异常' });
+    } else {
+      try {
+        res.end();
+      } catch (_) {}
+    }
+  }
+});
+
+// ============================================================
+// 健康检查
+// ============================================================
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    model: llmConfig.MODEL,
+    keyConfigured: !!llmConfig.API_KEY,
+    upstreamRetry: llmConfig.RETRY,
+    wikiQueue: wiki.queueStatus(),
+    features: { auth: true, wiki: true },
+  });
+});
+
+// ============================================================
+// 静态资源
+// ============================================================
+
+// 安全拦截：点开头文件（.env / .gitignore / .workbuddy）、后端源码、数据目录、依赖目录
+const BLOCKED_FILES =
+  /^\/(server\.js|package\.json|package-lock\.json|ecosystem\.config\.(cjs|js)|README\.md|DEPLOY\.md)$/i;
+
 app.use((req, res, next) => {
-  if (/(^|\/)\./.test(req.path) || req.path.startsWith('/node_modules')) {
+  const p = req.path;
+  if (/(^|\/)\./.test(p)) return res.status(404).send('Not Found');
+  if (BLOCKED_FILES.test(p)) return res.status(404).send('Not Found');
+  if (p.startsWith('/node_modules') || p.startsWith('/data') || p.startsWith('/lib')) {
     return res.status(404).send('Not Found');
   }
   next();
 });
 
-// ===== 静态托管前端 =====
-app.use(express.static(__dirname));
+app.use(express.static(ROOT));
 
-// SPA 兜底：所有非 API 路径返回 index.html
+// 兜底：非 API 路径返回 index.html
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(ROOT, 'index.html'));
 });
+
+// JSON 解析错误
+app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ error: '请求体过大' });
+  }
+  if (err) {
+    console.error('[server] 未捕获错误:', err.message);
+    return res.status(500).json({ error: '服务器内部错误' });
+  }
+  next();
+});
+
+// 确保 data 目录存在
+if (!fs.existsSync(path.join(ROOT, 'data'))) {
+  fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
+}
 
 app.listen(PORT, () => {
   console.log(`✅ AI 工具箱后端已启动: http://localhost:${PORT}`);
-  console.log(`   模型: ${AGNES_MODEL}`);
-  console.log(`   Key 已配置: ${AGNES_API_KEY ? '是' : '否（请在 .env 中设置）'}`);
-  console.log(`   上游重试: ${UPSTREAM_RETRY} 次`);
+  console.log(`   模型: ${llmConfig.MODEL}`);
+  console.log(`   Key 已配置: ${llmConfig.API_KEY ? '是' : '否（请在 .env 中设置）'}`);
+  console.log(`   上游重试: ${llmConfig.RETRY} 次`);
 });

@@ -104,6 +104,49 @@ pm2 stop ai-toolbox       # 停止
 
 浏览器打开：`http://你的服务器IP:3000`
 
+首次访问需要**注册一个账号**（邮箱 + 密码，邮箱不用真能收信，只是作为账号标识）。
+
+---
+
+## 5.5 数据存储与备份（重要）
+
+所有用户数据都在项目的 `data/` 目录，服务启动时会自动创建：
+
+```
+data/
+├── db.json            # 账号、会话、文档元数据
+├── content/           # 上传的文档原文（切分后）
+└── wiki/<userId>/     # 每个用户独立的知识库
+    ├── index.md       #   总目录
+    ├── log.md         #   操作日志
+    └── pages/*.md     #   词条
+```
+
+**备份**：打包 `data/` 即为完整备份
+
+```bash
+tar -czf ai-toolbox-backup-$(date +%F).tar.gz ~/ai-toolbox/data
+```
+
+**迁移到新服务器**：把 `data/` 一起拷过去即可，账号和知识库都保留。
+
+> `data/` 已加入 `.gitignore`，不会进 git 仓库 —— 账号密码哈希和用户文档不应该放到公开仓库里。
+
+---
+
+## 5.6 环境变量（可选调优）
+
+除上面必填的几项外，还可以在 `.env` 里加：
+
+| 变量 | 作用 | 默认 |
+|------|------|------|
+| `UPSTREAM_RETRY` | 上游请求重试次数 | `3` |
+| `LLM_MIN_INTERVAL_MS` | 编译任务最小调用间隔（防限流） | `3200` |
+| `MAX_DOC_CHARS` | 单篇文档最大字符数 | `1500000` |
+| `WIKI_MAX_UPDATES` | 每次编译最多更新的词条数 | `6` |
+
+改完 `.env` 需要重启：`pm2 restart ai-toolbox`
+
 ---
 
 ## 6.（可选）用 Nginx 反代 + 去掉端口号
@@ -153,9 +196,47 @@ sudo systemctl reload nginx
   # 临时放行（firewalld）
   sudo firewall-cmd --add-port=3000/tcp --permanent && sudo firewall-cmd --reload
   ```
+
+- **上传文档后一直显示「编译中」**：这是正常的。编译要把原文交给模型提炼成词条，
+  一份普通文档大约需要 **1~2 分钟**（免费档调用有节流）。编译期间可以直接提问，
+  系统会降级为「直接读原文回答」。
+
+- **编译失败**：看日志找原因
+  ```bash
+  pm2 logs ai-toolbox --err --lines 50
+  ```
+  常见原因是 Key 无效（401）或网络抖动（已自动重试 3 次）。修复后在页面上点文档重新编译即可。
+
+- **用户忘记密码**：目前没有找回功能（没接邮件服务）。直接删掉 `data/db.json` 里对应用户即可重新注册：
+  ```bash
+  # 先停服务，编辑后再启动
+  pm2 stop ai-toolbox
+  nano ~/ai-toolbox/data/db.json
+  pm2 start ai-toolbox
+  ```
+
 - **改代码后更新**：
   ```bash
   cd ~/ai-toolbox
   git pull
   pm2 restart ai-toolbox
   ```
+  > 只有 `server.js` / `lib/` / `.env` 改动才需要重启；HTML 等静态文件 `git pull` 后刷新即生效。
+
+---
+
+## 架构速览（便于排查）
+
+```
+浏览器 ──HTTP──▶ Node/Express
+                  ├─ /api/auth/*     账号（scrypt 哈希 + HttpOnly Cookie 会话）
+                  ├─ /api/docs/*     文档管理（存 data/content/）
+                  ├─ /api/wiki/*     知识库读取
+                  ├─ /api/rag/ask    问答（SSE 流式）
+                  └─ /api/chat       通用 AI 代理（周报用）
+                        │
+                        ▼
+                  Agnes API（Key 只在服务端）
+                        │
+                  lib/wiki.js 编译队列（串行 + 节流）
+```
