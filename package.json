@@ -1,0 +1,14 @@
+{
+  "name": "ai-toolbox",
+  "version": "1.0.0",
+  "description": "AI 工具箱：知识库问答（RAG）+ AI 周报生成器",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

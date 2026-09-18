@@ -1,0 +1,17 @@
+# 依赖
+node_modules/
+
+# 环境变量（含 API Key，绝不能提交）
+.env
+
+# 日志
+*.log
+npm-debug.log*
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# WorkBuddy 工具内部文件（含本地路径 / 工作记录，不提交）
+.wbapp_*.genie
+.workbuddy/

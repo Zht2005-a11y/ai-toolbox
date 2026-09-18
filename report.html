@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 周报生成器 · AI 工具箱</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root{
+    --bg:#f6f7fb;--card:#fff;--ink:#1a1d29;--sub:#6b7280;--line:#e7e9f0;
+    --brand:#5b6cff;--brand2:#8b5cf6;--brand-grad:linear-gradient(135deg,#5b6cff,#8b5cf6);
+    --ok:#16a34a;--warn:#d97706;--err:#dc2626;--radius:18px;
+    --shadow:0 10px 30px rgba(20,24,60,.08);--shadow-sm:0 4px 14px rgba(20,24,60,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+
+  header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .back{display:flex;align-items:center;gap:6px;text-decoration:none;color:var(--ink);font-weight:600;font-size:14px}
+  .back:hover{color:var(--brand)}
+  .logo{font-weight:800;font-size:16px}
+  .logo .mark{color:var(--brand)}
+
+  .page{padding:28px 0 60px}
+  .page-head{margin-bottom:24px}
+  .page-head h1{font-size:26px;font-weight:900;letter-spacing:-.5px;margin-bottom:6px}
+  .page-head .sub{color:var(--sub);font-size:14.5px}
+
+  .layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  @media(max-width:820px){.layout{grid-template-columns:1fr}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:22px}
+  .card h3{font-size:15px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--sub);margin-bottom:6px}
+  .field input,.field textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;transition:.15s}
+  .field input:focus,.field textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(91,108,255,.12)}
+  .field textarea{min-height:220px;resize:vertical;line-height:1.6}
+
+  .style-pick{display:flex;gap:8px;flex-wrap:wrap}
+  .style-pick .opt{border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s;color:var(--sub)}
+  .style-pick .opt.on{background:#eef0ff;border-color:var(--brand);color:var(--brand)}
+  .style-pick .opt:hover{border-color:var(--brand)}
+
+  .gen-btn{width:100%;padding:13px;font-size:15px;border-radius:13px;border:none;cursor:pointer;font-weight:700;color:#fff;background:var(--brand-grad);box-shadow:0 6px 16px rgba(91,108,255,.3);transition:.18s;margin-top:4px}
+  .gen-btn:hover{filter:brightness(1.05)}
+  .gen-btn:disabled{opacity:.5;cursor:not-allowed}
+
+  .result-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .copy-btn{background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--sub);transition:.15s}
+  .copy-btn:hover{border-color:var(--brand);color:var(--brand)}
+  .copy-btn.done{background:#e8f7ee;border-color:var(--ok);color:var(--ok)}
+
+  .result-box{
+    background:#fbfbfd;border:1px solid var(--line);border-radius:14px;padding:18px;min-height:280px;
+    font-size:14.5px;line-height:1.75;white-space:pre-wrap;word-break:break-word;color:var(--ink);
+    max-height:600px;overflow-y:auto;
+  }
+  .result-box.placeholder{color:#b4b9c6;display:flex;align-items:center;justify-content:center;text-align:center}
+  .cursor{display:inline-block;width:8px;height:16px;background:var(--brand);margin-left:2px;vertical-align:-2px;animation:blink 1s infinite}
+  @keyframes blink{0%,60%,100%{opacity:.2}30%{opacity:1}}
+
+  .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:999;padding:10px 20px;border-radius:12px;font-size:14px;font-weight:600;color:#fff;transition:.3s;opacity:0;pointer-events:none;max-width:90vw;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap nav">
+    <a class="back" href="index.html">← 返回首页</a>
+    <div class="logo"><span class="mark">✦</span> AI 周报生成器</div>
+    <div style="width:70px"></div>
+  </div>
+</header>
+
+<div class="wrap page">
+  <div class="page-head">
+    <h1>📝 AI 周报生成器</h1>
+    <div class="sub">把一周的流水账丢进来，AI 帮你整理成重点突出、结构清晰的周报。</div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h3>✍️ 输入内容</h3>
+      <div class="field">
+        <label>本周做了哪些事（流水账即可）</label>
+        <textarea id="content" placeholder="例如：&#10;周一 修复了登录页面的 bug&#10;周二 和产品对了新功能的需求&#10;周三 完成订单模块开发&#10;周四 写测试、修了几个小问题&#10;周五 部署上线，处理线上告警"></textarea>
+      </div>
+      <div class="field">
+        <label>选择风格</label>
+        <div class="style-pick" id="stylePick">
+          <div class="opt on" data-v="professional">💼 专业正式</div>
+          <div class="opt" data-v="concise">⚡ 简洁高效</div>
+          <div class="opt" data-v="data">📊 数据量化</div>
+        </div>
+      </div>
+      <button class="gen-btn" id="genBtn">✨ 生成周报</button>
+    </div>
+
+    <div class="card">
+      <div class="result-head">
+        <h3 style="margin-bottom:0">📄 生成结果</h3>
+        <button class="copy-btn" id="copyBtn">📋 复制全文</button>
+      </div>
+      <div class="result-box placeholder" id="result">生成结果将显示在这里</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// AI 通过本地后端代理调用 Agnes（Key 在服务器端）
+const AI_MODEL = 'agnes-3.0-flash';
+
+function toast(msg, type){
+  let el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.className='toast'; document.body.appendChild(el); }
+  el.textContent = msg;
+  el.style.background = type === 'error' ? 'var(--err)' : (type === 'warn' ? 'var(--warn)' : 'var(--brand)');
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.style.opacity = '0', 2800);
+}
+
+const styleMap = {
+  professional: { name:'专业正式', sys:'用专业、正式、得体的职场语言撰写，措辞严谨，结构完整（工作概述、重点工作、进展与成果、问题与风险、下周计划）。' },
+  concise: { name:'简洁高效', sys:'用简洁精炼的语言撰写，直击重点，去掉冗余修饰，用短句和要点式表达，控制在 200 字以内。' },
+  data: { name:'数据量化', sys:'尽量用量化数据和具体指标来体现成果（数量、百分比、时长等），突出可衡量的产出。' }
+};
+
+let selectedStyle = 'professional';
+document.querySelectorAll('#stylePick .opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('#stylePick .opt').forEach(o => o.classList.remove('on'));
+    opt.classList.add('on');
+    selectedStyle = opt.dataset.v;
+  });
+});
+
+async function generate(){
+  const content = document.getElementById('content').value.trim();
+  if (!content) { toast('请先输入本周的工作内容', 'warn'); return; }
+
+  const genBtn = document.getElementById('genBtn');
+  const result = document.getElementById('result');
+  genBtn.disabled = true;
+  genBtn.textContent = '生成中…';
+  result.classList.remove('placeholder');
+  result.innerHTML = '';
+
+  const st = styleMap[selectedStyle];
+  const systemPrompt = `你是一位资深的职场周报撰写助手。请根据用户提供的本周工作流水账，整理成一份结构清晰的周报。${st.sys}使用简体中文，用 Markdown 格式输出（标题、要点列表等）。`;
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `请根据以下内容生成周报（${st.name}风格）：\n\n${content}` }
+  ];
+
+  try {
+    let full = '';
+    await streamChat(messages, (delta) => {
+      full += delta;
+      result.textContent = full;
+      result.scrollTop = result.scrollHeight;
+    });
+    if (!full) result.textContent = '（未生成内容，请重试）';
+    result._full = full;
+  } catch(e) {
+    result.textContent = '生成失败：' + (e.message || '网络错误');
+    result.style.color = 'var(--err)';
+  } finally {
+    genBtn.disabled = false;
+    genBtn.textContent = '✨ 生成周报';
+  }
+}
+
+// 通过本地后端代理调用 Agnes（流式 SSE）
+async function streamChat(messages, onDelta){
+  const resp = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, stream: true })
+  });
+
+  if (!resp.ok) {
+    let msg = '请求失败（' + resp.status + '）';
+    try {
+      const j = await resp.json();
+      msg = j.error || j.detail || msg;
+    } catch(e) {}
+    throw new Error(msg);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data:')) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === '[DONE]') return;
+      try {
+        const json = JSON.parse(data);
+        const delta = json.choices?.[0]?.delta?.content;
+        if (delta) onDelta(delta);
+      } catch(e) {}
+    }
+  }
+}
+
+document.getElementById('genBtn').addEventListener('click', generate);
+
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  const result = document.getElementById('result');
+  const text = result._full || result.textContent;
+  if (!text || result.classList.contains('placeholder')) { toast('暂无可复制的内容', 'warn'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copyBtn');
+    btn.classList.add('done');
+    btn.textContent = '✓ 已复制';
+    setTimeout(() => { btn.classList.remove('done'); btn.textContent = '📋 复制全文'; }, 2000);
+  } catch(e) {
+    // 降级：手动选择复制
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(result);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    toast('已复制（请手动全选确认）', 'success');
+  }
+});
+</script>
+</body>
+</html>
