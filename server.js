@@ -38,6 +38,52 @@ const PORT = process.env.PORT || 3000;
 const AGNES_API_KEY = process.env.AGNES_API_KEY || '';
 const AGNES_BASE_URL = process.env.AGNES_BASE_URL || 'https://apihub.agnes-ai.com/v1';
 const AGNES_MODEL = process.env.AGNES_MODEL || 'agnes-3.0-flash';
+// 上游重试次数（国内服务器访问境外接口偶发抖动，靠重试吸收）
+const UPSTREAM_RETRY = Math.max(1, Number(process.env.UPSTREAM_RETRY || 3));
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ===== 调用 Agnes（带自动重试 + 详细错误日志） =====
+async function callAgnes(payload) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= UPSTREAM_RETRY; attempt++) {
+    try {
+      const res = await fetch(`${AGNES_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${AGNES_API_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      // 5xx = 上游临时故障，可重试；4xx = 请求本身问题，直接返回给调用方
+      if (res.status >= 500 && attempt < UPSTREAM_RETRY) {
+        console.error(`[Agnes] 第 ${attempt} 次返回 ${res.status}，准备重试`);
+        await res.text().catch(() => {});
+        await sleep(300 * attempt);
+        continue;
+      }
+      return res;
+    } catch (e) {
+      lastError = e;
+      const c = e.cause;
+      const causeText = c ? `${c.code || ''}${c.message ? ' ' + c.message : ''}`.trim() : '';
+      console.error(
+        `[Agnes] 第 ${attempt}/${UPSTREAM_RETRY} 次请求失败: ${e.message}` +
+          (causeText ? ` | 底层原因: ${causeText}` : '')
+      );
+      if (attempt < UPSTREAM_RETRY) await sleep(300 * attempt);
+    }
+  }
+
+  const c = lastError && lastError.cause;
+  const detail = c ? `${c.code || ''}${c.message ? ' ' + c.message : ''}`.trim() : '';
+  const err = new Error('连接模型服务失败' + (detail ? `（${detail}）` : ''));
+  err.cause = c;
+  throw err;
+}
 
 // ===== AI 代理接口（关键：Key 只存在服务器端） =====
 app.post('/api/chat', async (req, res) => {
@@ -52,20 +98,12 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: '缺少 messages 参数' });
     }
 
-    // 转发给 Agnes
-    const upstream = await fetch(`${AGNES_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${AGNES_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: AGNES_MODEL,
-        messages,
-        temperature: temperature ?? 0.7,
-        max_tokens: max_tokens ?? 2048,
-        stream,
-      }),
+    const upstream = await callAgnes({
+      model: AGNES_MODEL,
+      messages,
+      temperature: temperature ?? 0.7,
+      max_tokens: max_tokens ?? 2048,
+      stream,
     });
 
     if (!upstream.ok) {
@@ -105,7 +143,10 @@ app.post('/api/chat', async (req, res) => {
     return res.json(data);
   } catch (e) {
     console.error('[Agnes] 代理异常:', e.message);
-    return res.status(502).json({ error: '代理服务异常：' + e.message });
+    return res.status(502).json({
+      error: `模型服务暂时连不上（已重试 ${UPSTREAM_RETRY} 次），请稍后重试`,
+      detail: e.message,
+    });
   }
 });
 
@@ -115,6 +156,7 @@ app.get('/api/health', (req, res) => {
     ok: true,
     model: AGNES_MODEL,
     keyConfigured: !!AGNES_API_KEY,
+    upstreamRetry: UPSTREAM_RETRY,
   });
 });
 
@@ -139,4 +181,5 @@ app.listen(PORT, () => {
   console.log(`✅ AI 工具箱后端已启动: http://localhost:${PORT}`);
   console.log(`   模型: ${AGNES_MODEL}`);
   console.log(`   Key 已配置: ${AGNES_API_KEY ? '是' : '否（请在 .env 中设置）'}`);
+  console.log(`   上游重试: ${UPSTREAM_RETRY} 次`);
 });
