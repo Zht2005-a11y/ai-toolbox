@@ -140,9 +140,19 @@
   .modal-body .frontmatter{font-size:11.5px;color:#9aa1b2;background:#f7f8fb;border-radius:8px;padding:8px 10px;margin-bottom:14px;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
 
   .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);z-index:999;padding:10px 20px;border-radius:12px;font-size:14px;font-weight:600;color:#fff;transition:.3s;opacity:0;pointer-events:none;max-width:90vw;text-align:center}
+
+  /* 启动校验遮罩：登录态确认前不露出页面内容，避免未登录时闪一下再跳登录页 */
+  #boot{position:fixed;inset:0;z-index:500;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--sub);font-size:14px}
+  #boot .spinner{width:26px;height:26px;border:3px solid #dfe3ee;border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  body.ready #boot{display:none}
 </style>
 </head>
 <body>
+<div id="boot">
+  <div class="spinner"></div>
+  <div id="bootText">正在进入知识库…</div>
+</div>
 <header>
   <div class="wrap nav">
     <a class="back" href="index.html">← 返回首页</a>
@@ -245,15 +255,21 @@ function extOf(name){ return (name.split('.').pop() || '').toLowerCase(); }
 
 // ===== 认证 =====
 async function initAuth(){
+  const bootText = document.getElementById('bootText');
+  const gotoLogin = (text, delay) => {
+    bootText.textContent = text || '尚未登录，正在前往登录页…';
+    setTimeout(() => location.replace('login.html?next=rag.html'), delay || 300);
+  };
   try {
-    const r = await fetch('/api/auth/me');
+    const r = await fetch('/api/auth/me', { cache: 'no-store' });
     const d = await r.json();
-    if (!d || !d.user) { location.replace('login.html?next=rag.html'); return false; }
+    if (!d || !d.user) { gotoLogin(); return false; }
     me = d.user;
     document.getElementById('userEmail').textContent = me.email;
+    document.body.classList.add('ready');
     return true;
   } catch (e) {
-    location.replace('login.html?next=rag.html');
+    gotoLogin('登录状态校验失败，正在前往登录页…', 800);
     return false;
   }
 }
@@ -622,6 +638,9 @@ document.getElementById('sendBtn').addEventListener('click', ask);
 document.getElementById('clearChat').addEventListener('click', clearChat);
 
 // ===== 启动 =====
+// 兜底：万一登录校验卡住（网络挂了），5 秒后放行，避免一直卡在遮罩上
+setTimeout(() => document.body.classList.add('ready'), 5000);
+
 (async () => {
   const ok = await initAuth();
   if (!ok) return;
