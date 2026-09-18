@@ -65,6 +65,10 @@
   .msg.err{color:var(--err)}
   .msg.ok{color:var(--ok)}
 
+  .forgot{text-align:right;margin:-4px 0 14px;font-size:13px}
+  .forgot a{color:var(--brand);font-weight:700;text-decoration:none}
+  .forgot a:hover{text-decoration:underline}
+
   .perks{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}
   .perks div{display:flex;gap:9px;align-items:flex-start;font-size:13px;color:var(--sub);margin-bottom:9px}
   .perks div:last-child{margin-bottom:0}
@@ -104,6 +108,7 @@
           <input type="password" id="password" placeholder="至少 6 位" autocomplete="current-password" required>
           <div class="hint" id="pwdHint" style="display:none">密码至少 6 位字符</div>
         </div>
+        <div class="forgot"><a href="reset.html">忘记密码？</a></div>
         <button class="submit" id="submitBtn" type="submit">登 录</button>
         <div class="msg" id="msg"></div>
       </form>
@@ -185,6 +190,11 @@ function nextUrl(){
   const next = p.get('next');
   if (next && /^[a-zA-Z0-9_-]+\.html$/.test(next)) return next;
   return 'rag.html';
+}
+
+// 从重置密码页回来：给个成功提示
+if (new URLSearchParams(location.search).get('reset') === '1') {
+  setMsg('密码已重置，请用新密码登录', 'ok');
 }
 
 // 已登录直接跳走

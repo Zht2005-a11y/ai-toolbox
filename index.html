@@ -122,7 +122,15 @@
 <footer>AI 工具箱 · 知识库问答 + 周报生成 · 基于 Agnes AI 模型</footer>
 
 <script>
-function openRag(){ location.href = 'rag.html'; }
+// 进入知识库前先确认登录态：未登录直接去登录页，避免 rag.html 渲染出来又跳走（闪一下）
+async function openRag(){
+  try {
+    const r = await fetch('/api/auth/me', { cache: 'no-store' });
+    const d = await r.json();
+    if (d && d.user) { location.href = 'rag.html'; return; }
+  } catch (e) {}
+  location.href = 'login.html?next=rag.html';
+}
 function openReport(){ location.href = 'report.html'; }
 
 // 登录状态

@@ -6,6 +6,7 @@ import * as store from './lib/store.js';
 import * as auth from './lib/auth.js';
 import * as wiki from './lib/wiki.js';
 import { chunkText } from './lib/chunk.js';
+import * as mailer from './lib/mailer.js';
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
@@ -68,6 +69,143 @@ app.get('/api/auth/me', (req, res) => {
   const ctx = auth.currentUser(req);
   if (!ctx) return res.json({ user: null });
   res.json({ user: { id: ctx.user.id, email: ctx.user.email, createdAt: ctx.user.createdAt } });
+});
+
+// ============================================================
+// 忘记密码 / 重置密码
+// ============================================================
+
+// 简易限流：同一 IP 每分钟最多 5 次、每小时最多 20 次
+const forgotHits = new Map();
+
+function rateLimited(key) {
+  const now = Date.now();
+  const hits = (forgotHits.get(key) || []).filter((t) => now - t < 3600000);
+  const recent = hits.filter((t) => now - t < 60000);
+  if (recent.length >= 5 || hits.length >= 20) {
+    forgotHits.set(key, hits);
+    return true;
+  }
+  hits.push(now);
+  forgotHits.set(key, hits);
+  return false;
+}
+
+function originOf(req) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  return `${proto}://${host}`;
+}
+
+function resetMailHtml(code, link, minutes) {
+  return [
+    '<div style="font-family:-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;line-height:1.7;color:#1a1d29">',
+    '<h2 style="margin:0 0 14px">重置你的 AI 工具箱密码</h2>',
+    `<p>我们收到了重置密码的请求。验证码 <b>${minutes}</b> 分钟内有效。</p>`,
+    `<p style="font-size:26px;font-weight:800;letter-spacing:6px;margin:18px 0;color:#5b6cff">${code}</p>`,
+    `<p>也可以直接点击下面的链接设置新密码：<br><a href="${link}" style="color:#5b6cff">${link}</a></p>`,
+    '<p style="color:#6b7280;font-size:13px">如果不是你本人操作，忽略这封邮件即可，密码不会改变。</p>',
+    '</div>',
+  ].join('');
+}
+
+// 第 1 步：申请重置（不泄露邮箱是否已注册）
+app.post('/api/auth/forgot', async (req, res) => {
+  try {
+    const email = auth.validateEmail((req.body || {}).email);
+    if (!email) return res.status(400).json({ error: '邮箱格式不正确' });
+
+    const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+    if (rateLimited(String(ip).split(',')[0])) {
+      return res.status(429).json({ error: '请求太频繁，请稍后再试' });
+    }
+
+    const user = store.findUserByEmail(email);
+    const payload = { ok: true, emailed: false, devMode: !mailer.mailConfig.enabled };
+
+    if (!user) {
+      // 账号不存在也返回成功，避免被用来探测注册邮箱
+      return res.json(payload);
+    }
+
+    const rec = store.createReset(user.id);
+    const link = `${originOf(req)}/reset.html?token=${rec.token}`;
+    const sent = await mailer.sendMail({
+      to: user.email,
+      subject: '重置你的 AI 工具箱密码',
+      html: resetMailHtml(rec.code, link, 15),
+    });
+
+    if (sent.ok) {
+      payload.emailed = true;
+      payload.hint = '重置邮件已发送，请查收邮箱（含垃圾箱）';
+    } else {
+      // 未配置邮件服务：把验证码打到服务端日志，并在本地模式下回传，
+      // 方便自部署自测。配置好 MAIL_API_URL / MAIL_API_KEY 后会自动关闭。
+      console.log(`[auth] 密码重置（邮件未配置）：${user.email} 验证码 ${rec.code} 链接 ${link}`);
+      payload.emailed = false;
+      payload.devCode = rec.code;
+      payload.devLink = link;
+      payload.hint = '当前服务未配置邮件，已生成验证码，请在下方继续';
+    }
+    return res.json(payload);
+  } catch (e) {
+    console.error('[auth] 申请重置异常:', e.message);
+    return res.status(500).json({ error: '操作失败，请稍后重试' });
+  }
+});
+
+// 校验链接里的 token 是否仍然有效
+app.get('/api/auth/reset/check', (req, res) => {
+  const token = String(req.query.token || '').trim();
+  const rec = store.findReset(token);
+  if (!rec) return res.status(400).json({ error: '链接无效或已过期，请重新申请' });
+  const user = store.findUserById(rec.userId);
+  if (!user) return res.status(400).json({ error: '链接无效或已过期，请重新申请' });
+  const at = user.email.indexOf('@');
+  const masked = at > 1 ? user.email[0] + '***' + user.email.slice(at) : user.email;
+  res.json({ ok: true, email: masked });
+});
+
+// 第 2 步：用「链接 token」或「邮箱 + 验证码」重置密码
+app.post('/api/auth/reset', (req, res) => {
+  try {
+    const { token, code, email, password } = req.body || {};
+    const pwdErr = auth.validatePassword(password);
+    if (pwdErr) return res.status(400).json({ error: pwdErr });
+
+    let rec = null;
+    if (token) {
+      rec = store.findReset(token);
+    } else {
+      const mail = auth.validateEmail(email);
+      if (!mail || !code) return res.status(400).json({ error: '请填写邮箱和验证码' });
+      const user = store.findUserByEmail(mail);
+      if (!user) return res.status(400).json({ error: '验证码不正确或已过期' });
+      const found = store.findReset(String(code).trim());
+      // 验证码必须属于该邮箱，避免跨账号撞码
+      if (!found || found.userId !== user.id) {
+        return res.status(400).json({ error: '验证码不正确或已过期' });
+      }
+      rec = found;
+    }
+    if (!rec) return res.status(400).json({ error: '验证码不正确或已过期' });
+
+    const user = store.findUserById(rec.userId);
+    if (!user) return res.status(400).json({ error: '账号不存在' });
+
+    const { hash, salt } = auth.hashPassword(password);
+    store.setUserPassword(user.id, { passwordHash: hash, salt });
+    store.consumeReset(rec.token);
+    // 改密后踢掉所有旧会话，强制重新登录
+    store.deleteUserSessions(user.id);
+
+    console.log('[auth] 密码已重置:', user.email);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[auth] 重置密码异常:', e.message);
+    res.status(500).json({ error: '重置失败，请稍后重试' });
+  }
 });
 
 // ============================================================
@@ -284,7 +422,22 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(ROOT));
+// 需要登录的页面：在服务端就 302，避免页面先渲染、JS 再跳走造成的「闪一下」
+const AUTH_PAGES = new Set(['/rag.html']);
+
+app.use((req, res, next) => {
+  if (!AUTH_PAGES.has(req.path)) return next();
+  if (!auth.currentUser(req)) return res.redirect(302, '/login.html?next=rag.html');
+  next();
+});
+
+app.use(
+  express.static(ROOT, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    },
+  })
+);
 
 // 兜底：非 API 路径返回 index.html
 app.get('*', (req, res, next) => {
