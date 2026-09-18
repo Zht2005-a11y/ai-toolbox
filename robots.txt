@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# 拿到域名后，把下面的地址换成你的真实域名
+Sitemap: https://your-domain.com/sitemap.xml
