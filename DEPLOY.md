@@ -37,10 +37,14 @@ sudo dnf install -y nodejs
 ## 1. 拉取代码
 
 ```bash
-cd /opt
+cd ~
 git clone <你的仓库地址> ai-toolbox
 cd ai-toolbox
 ```
+
+> 克隆到**家目录**（`~/ai-toolbox`）不需要 sudo，也不用 chown 过户，最省事。
+> 若想放 `/opt`：`sudo git clone <地址> /opt/ai-toolbox`，之后**必须**执行
+> `sudo chown -R $USER:$USER /opt/ai-toolbox` 过户，否则下一步建 `.env` 会报 Permission denied。
 
 ---
 
@@ -75,15 +79,24 @@ npm install --production
 # 安装 pm2
 npm install -g pm2
 
-# 启动
-pm2 start ecosystem.config.js
+# 启动（注意后缀是 .cjs —— package.json 里 type=module，.js 会被当 ESM 而报错）
+pm2 start ecosystem.config.cjs
 
-# 开机自启
+# 保存进程列表 + 设置开机自启
 pm2 save
-pm2 startup   # 按提示执行它输出的那行命令
+pm2 startup   # 按提示执行它输出的那行 sudo 命令
 ```
 
-查看状态：`pm2 status`　查看日志：`pm2 logs ai-toolbox`
+> 不想用配置文件也行，一条命令等效：`pm2 start server.js --name ai-toolbox`
+
+常用命令：
+
+```bash
+pm2 status                # 查看状态（要看到 online）
+pm2 logs ai-toolbox       # 看实时日志
+pm2 restart ai-toolbox    # 重启
+pm2 stop ai-toolbox       # 停止
+```
 
 ---
 
@@ -142,7 +155,7 @@ sudo systemctl reload nginx
   ```
 - **改代码后更新**：
   ```bash
-  cd /opt/ai-toolbox
+  cd ~/ai-toolbox
   git pull
   pm2 restart ai-toolbox
   ```

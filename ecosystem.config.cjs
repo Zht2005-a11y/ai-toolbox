@@ -1,5 +1,10 @@
 // PM2 进程管理配置
-// 用法：pm2 start ecosystem.config.js
+//
+// ⚠️ 必须用 .cjs 后缀：package.json 里声明了 "type": "module"，
+// 若文件名是 .js 会被 Node 当成 ESM，导致 module.exports 报错、pm2 启动失败。
+//
+// 用法：pm2 start ecosystem.config.cjs
+
 module.exports = {
   apps: [
     {
