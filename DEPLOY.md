@@ -4,17 +4,33 @@
 
 ## 0. 前提
 
-- 服务器已装 Node.js（建议 v18+，推荐 v20/22）
 - 项目已推到远程 git 仓库（GitHub/Gitee 等）
+- 服务器需要 Node.js **18 以上**（推荐 20 LTS）
 
-检查 Node 是否已装：
+检查是否已装：
 
 ```bash
 node -v
 npm -v
 ```
 
-如果没装，用 nvm 或系统包管理器安装 Node 20+。
+⚠️ **不要直接 `sudo apt install nodejs`** —— Ubuntu 自带的版本往往太旧（22.04 是 v12，跑不了本项目）。用 NodeSource 装 20 LTS：
+
+**Ubuntu / Debian：**
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+**CentOS / RHEL / 阿里云 Linux：**
+
+```bash
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo dnf install -y nodejs
+```
+
+装完再 `node -v` 确认版本 ≥ 18。
 
 ---
 

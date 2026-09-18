@@ -6,14 +6,27 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 加载 .env（Node 22 内置，无需 dotenv 依赖）
-try {
-  const envPath = path.join(__dirname, '.env');
-  if (fs.existsSync(envPath)) {
-    process.loadEnvFile(envPath);
+// ===== 加载 .env（零依赖） =====
+// Node 20.12+ 用内置 process.loadEnvFile；旧版本回退到手动解析，保证任何 Node 18+ 都能跑
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  if (typeof process.loadEnvFile === 'function') {
+    try {
+      process.loadEnvFile(envPath);
+    } catch (e) {
+      console.error('[env] .env 解析失败，将依赖系统环境变量:', e.message);
+    }
+  } else {
+    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (!m) continue;
+      let val = m[2].trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[m[1]] === undefined) process.env[m[1]] = val;
+    }
   }
-} catch (e) {
-  // 无 .env 文件时静默跳过，依赖系统环境变量
 }
 
 const app = express();
@@ -23,7 +36,7 @@ const PORT = process.env.PORT || 3000;
 
 // Agnes 配置
 const AGNES_API_KEY = process.env.AGNES_API_KEY || '';
-const AGNES_BASE_URL = process.env.AGNES_BASE_URL || 'https://api.agnes-ai.cn/v1';
+const AGNES_BASE_URL = process.env.AGNES_BASE_URL || 'https://apihub.agnes-ai.com/v1';
 const AGNES_MODEL = process.env.AGNES_MODEL || 'agnes-3.0-flash';
 
 // ===== AI 代理接口（关键：Key 只存在服务器端） =====
@@ -103,6 +116,14 @@ app.get('/api/health', (req, res) => {
     model: AGNES_MODEL,
     keyConfigured: !!AGNES_API_KEY,
   });
+});
+
+// ===== 安全拦截：禁止访问点开头文件（.env / .git / .workbuddy）与 node_modules =====
+app.use((req, res, next) => {
+  if (/(^|\/)\./.test(req.path) || req.path.startsWith('/node_modules')) {
+    return res.status(404).send('Not Found');
+  }
+  next();
 });
 
 // ===== 静态托管前端 =====
