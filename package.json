@@ -6,7 +6,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "test:unit": "node --test \"tests/unit/*.test.js\"",
+    "test:api": "node --test \"tests/api/*.test.js\"",
+    "hooks:install": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "express": "^4.19.2"
