@@ -56,6 +56,7 @@ AIprogram/
 ├── tests/                 # 测试（Node 内置 node:test）
 │   ├── unit/              #   单元层：auth / store / chunk / mailer
 │   └── api/               #   接口层：起真实服务跑 HTTP 断言
+├── .githooks/             # git 钩子：pre-push 自动跑测试
 ├── data/                  # 运行时数据（自动创建，已 gitignore）
 │   ├── db.json            #   账号、会话、文档元数据
 │   ├── content/           #   文档原文（切分后）
@@ -87,6 +88,15 @@ npm run test:unit   # 只跑单元测试
 npm run test:api    # 只跑接口测试
 ```
 
+**推送前自动跑**：仓库带了一个 `pre-push` 钩子，每次 `git push` 会先跑一遍 `npm test`，
+没过就中止推送。装一次即可：
+
+```bash
+npm run hooks:install     # 等价于 git config core.hooksPath .githooks
+```
+
+临时跳过用 `git push --no-verify`（不建议常用）。
+
 分两层：
 
 - `tests/unit/` 单元层：`auth`（密码哈希与校验、输入校验、Cookie）、`store`（用户/会话/重置记录/文档/wiki 文件/原子写）、`chunk`（文本切分）、`mailer`（发信成功、上游失败、未配置时降级）
@@ -98,7 +108,7 @@ npm run test:api    # 只跑接口测试
 - 接口测试把 `AGNES_API_KEY` 置空、`AGNES_BASE_URL` 指向不可达地址，**绝不真的调模型**（不花钱、不依赖网络）
 - 新增接口要同步补接口测试；改 `lib/` 下的纯逻辑要同步补单元测试
 
-CI：`.github/workflows/test.yml`，push / PR 时在 Node 20 与 22 上自动跑 `npm test`。
+（项目不接云端 CI：仓库是公开的，云端 Runner 意义不大，测试只在推送前本地跑。）
 
 ## 本地运行
 

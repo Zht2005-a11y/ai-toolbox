@@ -1,0 +1,28 @@
+#!/bin/sh
+# pre-push：推送前自动跑一遍测试套件，失败就中止推送。
+#
+# 安装（只需一次）：
+#   npm run hooks:install        # 等价于 git config core.hooksPath .githooks
+#
+# 临时跳过：
+#   git push --no-verify
+
+echo "[pre-push] 正在跑测试套件…"
+
+if command -v npm >/dev/null 2>&1; then
+  npm test
+else
+  node --test
+fi
+
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo ""
+  echo "[pre-push] 测试没过，已中止推送。"
+  echo "[pre-push] 确认是误报的话：git push --no-verify"
+  exit "$status"
+fi
+
+echo "[pre-push] 测试通过，继续推送。"
+exit 0
