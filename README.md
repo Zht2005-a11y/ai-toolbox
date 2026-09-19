@@ -46,12 +46,16 @@ AIprogram/
 │   ├── auth.js            # 密码哈希 + 会话 + 认证中间件
 │   ├── store.js           # 文件持久化（原子写）
 │   ├── chunk.js           # 文本切分
-│   └── wiki.js            # LLM Wiki 引擎（Ingest / Query / Lint）
+│   ├── wiki.js            # LLM Wiki 引擎（Ingest / Query / Lint）
+│   └── mailer.js          # 发信（忘记密码用，零依赖 fetch）
 ├── index.html             # 首页
 ├── login.html             # 登录 / 注册
 ├── reset.html             # 忘记密码 / 重置密码
 ├── rag.html               # 知识库问答
 ├── report.html            # 周报生成器
+├── tests/                 # 测试（Node 内置 node:test）
+│   ├── unit/              #   单元层：auth / store / chunk / mailer
+│   └── api/               #   接口层：起真实服务跑 HTTP 断言
 ├── data/                  # 运行时数据（自动创建，已 gitignore）
 │   ├── db.json            #   账号、会话、文档元数据
 │   ├── content/           #   文档原文（切分后）
@@ -72,6 +76,29 @@ AIprogram/
 - **邮件未配置时**的重置流程仍然可用：验证码会打印到服务端日志，并直接显示在页面上（页面会提示"未配置邮件"）。
   线上环境请在 `.env` 里配好 `MAIL_API_URL` / `MAIL_API_KEY` / `MAIL_FROM`，回显会自动关闭。
 - 申请验证码接口做了 IP 限流（每分钟 5 次、每小时 20 次），且无论邮箱是否注册都返回成功，避免被用来探测注册用户。
+
+## 测试
+
+用 Node 内置测试运行器（`node:test`），保持零额外依赖。
+
+```bash
+npm test            # 全部
+npm run test:unit   # 只跑单元测试
+npm run test:api    # 只跑接口测试
+```
+
+分两层：
+
+- `tests/unit/` 单元层：`auth`（密码哈希与校验、输入校验、Cookie）、`store`（用户/会话/重置记录/文档/wiki 文件/原子写）、`chunk`（文本切分）、`mailer`（发信成功、上游失败、未配置时降级）
+- `tests/api/` 接口层：spawn 一个真实服务进程跑 HTTP 断言 —— 登录守卫（未登录 `/rag.html` 必须 302）、注册登录、文档 CRUD、知识库、忘记密码全流程、限流、敏感文件拦截
+
+三条硬约定（写测试时别破）：
+
+- 测试用 `DATA_DIR` 把数据目录指到临时目录，**绝不碰真实的 `data/`**
+- 接口测试把 `AGNES_API_KEY` 置空、`AGNES_BASE_URL` 指向不可达地址，**绝不真的调模型**（不花钱、不依赖网络）
+- 新增接口要同步补接口测试；改 `lib/` 下的纯逻辑要同步补单元测试
+
+CI：`.github/workflows/test.yml`，push / PR 时在 Node 20 与 22 上自动跑 `npm test`。
 
 ## 本地运行
 
